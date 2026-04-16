@@ -10,15 +10,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Mongo bağlantısını daha görünür loglayalım
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-  .then(() => console.log("MongoDB bağlandı"))
-  .catch((err) => console.error("MongoDB hata:", err));
-
-// MODELS
 const User = mongoose.model("User", {
   username: String,
   password: String
@@ -37,7 +28,6 @@ const Comment = mongoose.model("Comment", {
   username: String
 });
 
-// AUTH MIDDLEWARE
 function auth(req, res, next) {
   const token = req.headers["authorization"];
   if (!token) return res.status(403).send("Token gerekli");
@@ -49,25 +39,18 @@ function auth(req, res, next) {
   });
 }
 
-// TEST ROUTE
 app.get("/", (req, res) => {
   res.send("API çalışıyor");
 });
 
-// REGISTER
 app.post("/register", async (req, res) => {
   try {
-    if (!req.body.username || !req.body.password) {
-      return res.status(400).send("Kullanıcı adı ve şifre gerekli");
-    }
-
     const existing = await User.findOne({ username: req.body.username });
     if (existing) {
       return res.status(400).send("Bu kullanıcı adı zaten kayıtlı");
     }
 
     const hash = await bcrypt.hash(req.body.password, 10);
-
     const user = new User({
       username: req.body.username,
       password: hash
@@ -81,13 +64,8 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// LOGIN
 app.post("/login", async (req, res) => {
   try {
-    if (!req.body.username || !req.body.password) {
-      return res.status(400).send("Kullanıcı adı ve şifre gerekli");
-    }
-
     const user = await User.findOne({ username: req.body.username });
     if (!user) return res.status(401).send("Hatalı giriş");
 
@@ -102,7 +80,6 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// GET POSTS
 app.get("/posts", async (req, res) => {
   try {
     const posts = await Post.find().sort({ _id: -1 });
@@ -113,15 +90,9 @@ app.get("/posts", async (req, res) => {
   }
 });
 
-// ADD POST
 app.post("/posts", auth, async (req, res) => {
   try {
-    if (!req.body.title || !req.body.content) {
-      return res.status(400).send("Başlık ve içerik gerekli");
-    }
-
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).send("Kullanıcı bulunamadı");
 
     const post = new Post({
       title: req.body.title,
@@ -137,7 +108,6 @@ app.post("/posts", auth, async (req, res) => {
   }
 });
 
-// DELETE POST
 app.delete("/posts/:id", auth, async (req, res) => {
   try {
     await Post.findByIdAndDelete(req.params.id);
@@ -148,7 +118,6 @@ app.delete("/posts/:id", auth, async (req, res) => {
   }
 });
 
-// LIKE POST
 app.post("/posts/:id/like", async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -163,7 +132,6 @@ app.post("/posts/:id/like", async (req, res) => {
   }
 });
 
-// GET COMMENTS
 app.get("/comments/:postId", async (req, res) => {
   try {
     const comments = await Comment.find({ postId: req.params.postId });
@@ -174,15 +142,9 @@ app.get("/comments/:postId", async (req, res) => {
   }
 });
 
-// ADD COMMENT
 app.post("/comments", auth, async (req, res) => {
   try {
-    if (!req.body.postId || !req.body.text) {
-      return res.status(400).send("Post ID ve yorum gerekli");
-    }
-
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).send("Kullanıcı bulunamadı");
 
     const comment = new Comment({
       postId: req.body.postId,
@@ -200,6 +162,21 @@ app.post("/comments", auth, async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log("Server çalışıyor: " + PORT);
-});
+async function startServer() {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 30000
+    });
+
+    console.log("MongoDB bağlandı");
+
+    app.listen(PORT, () => {
+      console.log("Server çalışıyor: " + PORT);
+    });
+  } catch (error) {
+    console.error("MongoDB bağlantı hatası:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
